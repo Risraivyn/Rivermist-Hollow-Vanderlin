@@ -559,6 +559,7 @@
 		if(MOVE_INTENT_RUN)
 			if(isliving(src))
 				var/mob/living/L = src
+				L.update_dynamic_shadows()
 				if(L.stamina >= L.maximum_stamina)
 					return
 				if(L.energy <= 0)
