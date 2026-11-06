@@ -112,7 +112,7 @@ GLOBAL_VAR_INIT(fov_box_uid, 0)
 	var/my_z = my_turf.z
 	var/radius = custom_radius ? custom_radius : (is_looking_afar ? 18 : 8)
 
-	var/list/quad_data = call_ext(RUST_G, "byond:calculate_shadows_fast")(px, py, my_z, radius)
+	var/list/quad_data = call_ext(SHADOWCAST_LIB, "byond:calculate_shadows_fast")(px, py, my_z, radius)
 
 	var/list/used_keys_this_frame = list()
 
@@ -153,14 +153,14 @@ GLOBAL_VAR_INIT(fov_box_uid, 0)
 
 	client.clear_unused_shadows(used_keys_this_frame)
 
-	var/list/visible_ids = call_ext(RUST_G, "byond:get_visible_boxes")(px, py, my_z, radius)
+	var/list/visible_ids = call_ext(SHADOWCAST_LIB, "byond:get_visible_boxes")(px, py, my_z, radius)
 	var/list/visible_map = list()
 	if(islist(visible_ids))
 		for(var/vid in visible_ids)
 			visible_map["[round(vid)]"] = TRUE
 
-	for(var/obj/O in GLOB.fov_cutout_objects)
-		if(O.z != my_z || !O.cutout_atom)
+	for(var/obj/O in range(round(radius) + 2, my_turf))
+		if(!O.cutout_atom || !O.fov_box_id)
 			continue
 
 		var/str_id = "[round(O.fov_box_id)]"
@@ -311,11 +311,11 @@ GLOBAL_VAR_INIT(fov_box_uid, 0)
 	var/wz = T.z
 
 	if(isnum(fov_shadow_box[1]))
-		call_ext(RUST_G, "byond:set_box_world")(fov_box_id, wz, wx, wy, fov_shadow_box[1], fov_shadow_box[2], fov_shadow_box[3], fov_shadow_box[4])
+		call_ext(SHADOWCAST_LIB, "byond:set_box_world")(fov_box_id, wz, wx, wy, fov_shadow_box[1], fov_shadow_box[2], fov_shadow_box[3], fov_shadow_box[4])
 	else
 		var/sub_id = 0
 		for(var/list/B in fov_shadow_box)
-			call_ext(RUST_G, "byond:set_box_world")(fov_box_id + (sub_id++ * 100000), wz, wx, wy, B[1], B[2], B[3], B[4])
+			call_ext(SHADOWCAST_LIB, "byond:set_box_world")(fov_box_id + (sub_id++ * 100000), wz, wx, wy, B[1], B[2], B[3], B[4])
 
 /obj/proc/update_fov_shadow_pixel_shift()
 	if(!fov_shadow_box || !fov_box_id)
@@ -327,11 +327,11 @@ GLOBAL_VAR_INIT(fov_box_uid, 0)
 	if(!fov_box_id)
 		return
 	if(isnum(fov_shadow_box[1]))
-		call_ext(RUST_G, "byond:remove_box_by_id")(fov_box_id)
+		call_ext(SHADOWCAST_LIB, "byond:remove_box_by_id")(fov_box_id)
 	else
 		var/sub_id = 0
 		for(var/list/B in fov_shadow_box)
-			call_ext(RUST_G, "byond:remove_box_by_id")(fov_box_id + (sub_id++ * 100000))
+			call_ext(SHADOWCAST_LIB, "byond:remove_box_by_id")(fov_box_id + (sub_id++ * 100000))
 
 	notify_shadows_map_changed(src, custom_range = 7)
 
