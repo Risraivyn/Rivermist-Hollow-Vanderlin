@@ -7,6 +7,10 @@ GLOBAL_VAR_INIT(fov_box_uid, 0)
 	var/list/image/shadow_images_pool = list()
 	var/list/image/active_shadows = list()
 
+/image
+	var/last_mat_c = -9999
+	var/last_mat_f = -9999
+
 /client/proc/init_shadow_pool()
 	if(shadow_images_pool.len || active_shadows.len)
 		return
@@ -44,6 +48,8 @@ GLOBAL_VAR_INIT(fov_box_uid, 0)
 			var/image/I = active_shadows[key]
 			if(I)
 				I.loc = null
+				I.last_mat_c = -9999
+				I.last_mat_f = -9999
 				shadow_images_pool += I
 			keys_to_remove += key
 
@@ -171,13 +177,20 @@ GLOBAL_VAR_INIT(fov_box_uid, 0)
 
 			if(bench) t_sub = TICK_USAGE_REAL
 
-			var/matrix/M = matrix(
-				quad_data[i + 2], quad_data[i + 3], quad_data[i + 4],
-				quad_data[i + 5], quad_data[i + 6], quad_data[i + 7]
-			)
+			var/mc = quad_data[i + 4]
+			var/mf = quad_data[i + 7]
 
-			if(I.transform != M)
-				I.transform = M
+			var/dc = I.last_mat_c - mc
+			var/df = I.last_mat_f - mf
+
+
+			if((dc * dc + df * df) > 1.44)
+				I.transform = matrix(
+					quad_data[i + 2], quad_data[i + 3], mc,
+					quad_data[i + 5], quad_data[i + 6], mf
+				)
+				I.last_mat_c = mc
+				I.last_mat_f = mf
 
 			if(bench)
 				var/d = TICK_USAGE_REAL - t_sub
