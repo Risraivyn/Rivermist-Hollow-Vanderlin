@@ -1,7 +1,6 @@
 /mob/living/Moved(atom/OldLoc, Dir, Forced = FALSE)
 	. = ..()
 	stop_looking()
-	update_dynamic_shadows()
 	update_turf_movespeed(loc)
 
 	if(m_intent == MOVE_INTENT_RUN)
@@ -20,7 +19,7 @@
 	if(glide_size > 0)
 		ticks_to_move = round(world.icon_size / glide_size)
 
-	var/total_points = clamp(ticks_to_move, 1, 5)
+	var/total_points = clamp(ticks_to_move, 1, 4)
 
 	if(total_points <= 1)
 		shadow_glide_id++

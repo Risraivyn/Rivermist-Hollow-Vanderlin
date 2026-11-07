@@ -1,4 +1,4 @@
-#define SHADOW_IMAGE_POOL_SIZE 500
+#define SHADOW_IMAGE_POOL_SIZE 150
 #define SHADOW_OPACITY         255
 GLOBAL_LIST_EMPTY(fov_cutout_objects)
 GLOBAL_VAR_INIT(fov_box_uid, 0)
@@ -44,8 +44,6 @@ GLOBAL_VAR_INIT(fov_box_uid, 0)
 			var/image/I = active_shadows[key]
 			if(I)
 				I.loc = null
-				animate(I)
-				I.transform = matrix()
 				shadow_images_pool += I
 			keys_to_remove += key
 
@@ -87,6 +85,17 @@ GLOBAL_VAR_INIT(fov_box_uid, 0)
 		L.update_dynamic_shadows(custom_glide = 0)
 
 /mob/living/proc/update_dynamic_shadows(custom_px = null, custom_py = null, custom_radius = null, custom_glide = 0)
+	var/bench = GLOB.shadow_profiling_enabled
+	var/t_start = 0
+	if(bench)
+		var/total_cost = TICK_USAGE_REAL - t_start
+		if(total_cost < 0) total_cost += 100
+		GLOB.shadow_total_calls++
+		GLOB.shadow_total_tick_usage += total_cost
+
+		if(client)
+			GLOB.shadow_prof_player_calls[client.ckey]++
+
 	if(!client)
 		return
 	client.init_shadow_pool()
@@ -111,10 +120,20 @@ GLOBAL_VAR_INIT(fov_box_uid, 0)
 
 	var/my_z = my_turf.z
 	var/radius = custom_radius ? custom_radius : (is_looking_afar ? 18 : 8)
+	var/t_rust = 0
+	if(bench) t_rust = TICK_USAGE_REAL
 
 	var/list/quad_data = call_ext(SHADOWCAST_LIB, "byond:calculate_shadows_fast")(px, py, my_z, radius)
 
+	if(bench)
+		var/d = TICK_USAGE_REAL - t_rust
+		if(d < 0) d += 100
+		GLOB.shadow_prof_rust_quads += d
+
 	var/list/used_keys_this_frame = list()
+
+	var/accum_images = 0
+	var/accum_matrices = 0
 
 	if(quad_data && islist(quad_data))
 		var/total_len = quad_data.len
@@ -123,10 +142,12 @@ GLOBAL_VAR_INIT(fov_box_uid, 0)
 		var/turf/cached_turf = null
 
 		for(var/i = 1; i <= total_len; i += 9)
-			var/key = quad_data[i + 8]
+			var/key = "[quad_data[i + 8]]"
 			used_keys_this_frame[key] = TRUE
 			var/ax = quad_data[i]
 			var/ay = quad_data[i + 1]
+			var/t_sub = 0
+			if(bench) t_sub = TICK_USAGE_REAL
 
 			if(ax != last_ax || ay != last_ay)
 				cached_turf = locate(ax, ay, my_z)
@@ -143,6 +164,13 @@ GLOBAL_VAR_INIT(fov_box_uid, 0)
 			else if(I.loc != cached_turf)
 				I.loc = cached_turf
 
+			if(bench)
+				var/d = TICK_USAGE_REAL - t_sub
+				if(d < 0) d += 100
+				accum_images += d
+
+			if(bench) t_sub = TICK_USAGE_REAL
+
 			var/matrix/M = matrix(
 				quad_data[i + 2], quad_data[i + 3], quad_data[i + 4],
 				quad_data[i + 5], quad_data[i + 6], quad_data[i + 7]
@@ -151,24 +179,56 @@ GLOBAL_VAR_INIT(fov_box_uid, 0)
 			if(I.transform != M)
 				I.transform = M
 
+			if(bench)
+				var/d = TICK_USAGE_REAL - t_sub
+				if(d < 0) d += 100
+				accum_matrices += d
+
+	if(bench)
+		GLOB.shadow_prof_dm_images += accum_images
+		GLOB.shadow_prof_dm_matrices += accum_matrices
+
+	var/t_clean = 0
+	if(bench) t_clean = TICK_USAGE_REAL
+
 	client.clear_unused_shadows(used_keys_this_frame)
 
-	var/list/visible_ids = call_ext(SHADOWCAST_LIB, "byond:get_visible_boxes")(px, py, my_z, radius)
-	var/list/visible_map = list()
-	if(islist(visible_ids))
-		for(var/vid in visible_ids)
-			visible_map["[round(vid)]"] = TRUE
+	if(bench)
+		var/d = TICK_USAGE_REAL - t_clean
+		if(d < 0) d += 100
+		GLOB.shadow_prof_dm_cleanup += d
 
-	for(var/obj/O in range(round(radius) + 2, my_turf))
-		if(!O.cutout_atom || !O.fov_box_id)
-			continue
+	var/t_cutouts = 0
+	if(bench) t_cutouts = TICK_USAGE_REAL
 
-		var/str_id = "[round(O.fov_box_id)]"
+	if(GLOB.fov_cutout_objects.len)
+		var/list/visible_ids = call_ext(SHADOWCAST_LIB, "byond:get_visible_boxes")(px, py, my_z, radius)
+		var/list/visible_map = list()
 
-		if(visible_map[str_id])
-			O.cutout_atom.alpha = 255
-		else
-			O.cutout_atom.alpha = 0
+		if(islist(visible_ids))
+			for(var/vid in visible_ids)
+				visible_map["[round(vid)]"] = TRUE
+
+		for(var/obj/O in GLOB.fov_cutout_objects)
+			if(O.z != my_z || get_dist(my_turf, O) > (radius + 2))
+				continue
+
+			var/str_id = "[round(O.fov_box_id)]"
+
+			if(visible_map[str_id])
+				O.cutout_atom.alpha = 255
+			else
+				O.cutout_atom.alpha = 0
+
+	if(bench)
+		var/d = TICK_USAGE_REAL - t_cutouts
+		if(d < 0) d += 100
+		GLOB.shadow_prof_dm_cutouts += d
+	if(bench)
+		var/total_cost = TICK_USAGE_REAL - t_start
+		if(total_cost < 0) total_cost += 100
+		GLOB.shadow_total_calls++
+		GLOB.shadow_total_tick_usage += total_cost
 
 /client/proc/reset_shadow_pool()
 	for(var/key in active_shadows)
