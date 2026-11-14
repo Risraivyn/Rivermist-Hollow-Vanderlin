@@ -177,6 +177,7 @@
 	desc = "The steel-lined heels click."
 	icon_state = "inqboots"
 	item_state = "inqboots"
+	social_cues = list("faction:town_watch" = 5, "rank:town_watch:sergeant" = 5, "elite:town_watch" = 3)
 
 //Luskanian Duelist Merc - On par with grenzelhoftian's stats.
 /obj/item/clothing/shoes/nobleboot/duelboots
@@ -208,6 +209,7 @@
 /obj/item/clothing/shoes/courtphysician/female
 	name = "sanguine heels"
 	desc = "Leather heels, the solemn tap of these bears grim news, or salvation."
+	heeled = TRUE
 	icon_state = "docheels"
 	item_state = "docheels"
 	icon = 'icons/roguetown/clothing/courtphys.dmi'

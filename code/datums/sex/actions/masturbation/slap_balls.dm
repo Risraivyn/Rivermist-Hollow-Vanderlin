@@ -42,7 +42,7 @@
 			arousal_amt = 1.1
 			pain_amt = 4.5
 			orgasm_amt = 0.5
-		if(SEX_FORCE_EXTREME)
+		if(SEX_FORCE_EXTREME, SEX_FORCE_UNRELENTING)
 			action_text = "brutally smacks"
 			arousal_amt = 0.8
 			pain_amt = 7
@@ -63,7 +63,8 @@
 	add_sex_lock(user, ORGAN_SLOT_TESTICLES, null, FALSE)
 
 /datum/sex_action/masturbate/other/slap_balls
-	name = "Slap their balls"
+	name = "Ball slapping"
+	remote_phrase = "Slap their balls"
 	description = "Slap their balls, ranging from a teasing tap to a punishing smack."
 	target_menu_zone_mask = SEX_UI_ZONE_GENITALS
 	do_time = 2.5 SECONDS
@@ -107,7 +108,7 @@
 			arousal_amt = 1.1
 			pain_amt = 4.5
 			orgasm_amt = 0.5
-		if(SEX_FORCE_EXTREME)
+		if(SEX_FORCE_EXTREME, SEX_FORCE_UNRELENTING)
 			action_text = "brutally smacks"
 			arousal_amt = 0.8
 			pain_amt = 7

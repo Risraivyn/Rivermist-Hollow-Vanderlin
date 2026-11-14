@@ -64,10 +64,6 @@
 /obj/item/natural/worms/leech/counts_as_stored_toy()
 	return FALSE
 
-/// Batch 4 fills this: the toggleable shake for toys, eggs and births moving inside; [kind] names the cause.
-/mob/living/proc/hole_shake_hook(kind, strength = 1)
-	return
-
 // ---- Stirring ----
 
 /// Each flow tick the toys inside stir: pleasure by size and depth, and now and then a line.
@@ -229,18 +225,29 @@
 
 // ---- The window's self flow ----
 
-/// The vagina or anus this window id names, or null.
+/obj/item/organ/genitals/filling_organ/proc/get_toy_hole_word()
+	return get_orifice()?.opening_name || pick(altnames)
+
+/obj/item/organ/genitals/filling_organ/breasts/get_toy_hole_word()
+	return "cleavage"
+
+/obj/item/organ/genitals/filling_organ/breasts/get_toy_remove_fail_chance(obj/item/toy, layer)
+	return 0
+
+/// The vagina, anus or breasts this window id names, or null.
 /mob/living/carbon/human/proc/get_toy_hole(hole_id)
 	switch(hole_id)
 		if("vagina")
 			return get_real_organ(src, ORGAN_SLOT_VAGINA)
 		if("anus")
 			return get_real_organ(src, ORGAN_SLOT_ANUS)
+		if("breasts")
+			return get_real_organ(src, ORGAN_SLOT_BREASTS)
 	return null
 
-/// The hole among vagina and anus that stores [toy], or null.
+/// The hole among vagina, anus and cleavage that stores [toy], or null.
 /mob/living/carbon/human/proc/find_toy_hole(obj/item/toy)
-	for(var/slot in list(ORGAN_SLOT_VAGINA, ORGAN_SLOT_ANUS))
+	for(var/slot in list(ORGAN_SLOT_VAGINA, ORGAN_SLOT_ANUS, ORGAN_SLOT_BREASTS))
 		var/obj/item/organ/genitals/filling_organ/hole = get_real_organ(src, slot)
 		if(istype(hole) && SEND_SIGNAL(hole, COMSIG_BODYSTORAGE_FIND_ITEM_LAYER, toy))
 			return hole
@@ -254,8 +261,12 @@
 		return "I can't reach like this."
 	if(has_status_effect(/datum/status_effect/labour))
 		return "Not now. My body has other work."
+	return get_hole_access_block_reason(hole, src)
+
+/// Why [hole] is out of [actor]'s reach whatever the body's state: armor, a worn device, or something inside it.
+/mob/living/carbon/human/proc/get_hole_access_block_reason(obj/item/organ/genitals/filling_organ/hole, mob/living/actor)
 	// The panel's rules: only armor above light keeps hands off, and a worn device seals its slot.
-	if(get_sex_covering_garment(BODY_ZONE_PRECISE_GROIN))
+	if(get_sex_covering_garment(hole.slot == ORGAN_SLOT_BREASTS ? BODY_ZONE_CHEST : BODY_ZONE_PRECISE_GROIN, actor))
 		return "My clothes are in the way."
 	if(is_organ_slot_blocked(hole.slot))
 		return "Something worn keeps me out of there."
@@ -308,7 +319,7 @@
 	return TRUE
 
 /mob/living/carbon/human/proc/insert_toy(obj/item/organ/genitals/filling_organ/hole, obj/item/toy)
-	var/hole_word = hole.get_orifice()?.opening_name || pick(hole.altnames)
+	var/hole_word = hole.get_toy_hole_word()
 	var/feel = hole.get_hole_feel("insert")
 	visible_message(span_warning("[src] starts working [toy] into [p_their()] [hole_word]..."), span_love("I start working [toy] into my [hole_word]..."))
 	hole.play_hole_sound("insert", 40, pick('sound/misc/mat/insert (1).ogg', 'sound/misc/mat/insert (2).ogg'))
@@ -355,7 +366,7 @@
 	var/layer = SEND_SIGNAL(hole, COMSIG_BODYSTORAGE_FIND_ITEM_LAYER, toy)
 	if(!layer)
 		return FALSE
-	var/hole_word = hole.get_orifice()?.opening_name || pick(hole.altnames)
+	var/hole_word = hole.get_toy_hole_word()
 	var/feel = hole.get_hole_feel("withdraw")
 	visible_message(span_warning("[src] reaches in after [toy]..."), span_love("I reach into my [hole_word] after [toy]..."))
 	SEND_SIGNAL(src, COMSIG_SEX_HOLE_BEFORE_REMOVE, toy, hole.slot, src)
@@ -380,6 +391,32 @@
 	visible_message(span_notice("[src] draws [toy] out of [p_their()] [hole_word]."), span_love("I draw [toy] out of my [hole_word][feel]."))
 	SEND_SIGNAL(src, COMSIG_SEX_GENERIC_ACTION, src, toy.get_body_storage_stir_pleasure(layer), 0, 0, src)
 	return TRUE
+
+// ---- Push out, blind ----
+
+/// Whether this body can tell its stored items apart by feel.
+/mob/living/carbon/human/proc/can_feel_stored_items()
+	return has_quirk(/datum/quirk/neutral/selfawaregeni)
+
+/// The items in [hole] a hand could work out; eggs, hatchlings and stand-ins have their own ways.
+/mob/living/carbon/human/proc/get_pushable_toys(obj/item/organ/genitals/filling_organ/hole)
+	var/list/toys = list()
+	if(!istype(hole))
+		return toys
+	for(var/layer in list(STORAGE_LAYER_OUTER, STORAGE_LAYER_INNER, STORAGE_LAYER_DEEP))
+		for(var/obj/item/stored as anything in hole.get_body_storage_items_for_interaction(layer, BODYSTORAGE_REMOVE_MANUAL))
+			if(istype(stored, /obj/item/oviposition_egg) || istype(stored, /obj/item/mob_holder/internal_womb) || istype(stored, /obj/item/penis_fake))
+				continue
+			toys += stored
+	return toys
+
+/// Works whatever comes to hand out of [hole]: the same take-out, with the item picked blind.
+/mob/living/carbon/human/proc/try_push_out_random_toy(obj/item/organ/genitals/filling_organ/hole)
+	var/list/toys = get_pushable_toys(hole)
+	if(!length(toys))
+		to_chat(src, span_warning("There is nothing in there I could push out."))
+		return FALSE
+	return try_remove_toy(pick(toys))
 
 // ---- Push deeper ----
 
@@ -406,7 +443,7 @@
 	return TRUE
 
 /mob/living/carbon/human/proc/push_toy_deeper(obj/item/organ/genitals/filling_organ/hole, obj/item/toy)
-	var/hole_word = hole.get_orifice()?.opening_name || pick(hole.altnames)
+	var/hole_word = hole.get_toy_hole_word()
 	visible_message(span_warning("[src] pushes at [toy], working it deeper..."), span_love("I push [toy] deeper into my [hole_word]..."))
 	if(!do_after(src, TOY_PUSH_DEEPER_TIME, src, extra_checks = CALLBACK(src, PROC_REF(can_keep_working_toy_out), hole, toy)))
 		to_chat(src, span_warning("I stop pushing."))

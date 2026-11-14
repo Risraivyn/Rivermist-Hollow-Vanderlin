@@ -1247,6 +1247,7 @@
 	if(!pixelshifted)
 		reset_offsets("pixel_shift")
 		return FALSE
+	reset_pixel_rotation()
 	pixelshifted = FALSE
 	pixelshift_x = 0
 	pixelshift_y = 0
@@ -1776,9 +1777,9 @@
 		combat_modifier += 0.5
 
 	var/stamina_factor = 1.0
-	if(L.stamina / L.maximum_stamina < 0.5)
+	if(L.stamina / L.maximum_stamina > 0.5)
 		stamina_factor += 0.3 // Tired grabbers are weaker
-	if(stamina / maximum_stamina < 0.3)
+	if(stamina / maximum_stamina > 0.7)
 		stamina_factor -= 0.2 // But tired victims also struggle more
 
 	var/grab_count = 0
@@ -2782,7 +2783,7 @@
 	if(m_intent != MOVE_INTENT_SNEAK)
 		visible_message(span_info("[src] looks around."), span_info("I look around."))
 	var/looktime = 5 SECONDS - (GET_MOB_ATTRIBUTE_VALUE(src, STAT_PERCEPTION) * 2)
-	if(has_quirk(/datum/quirk/boon/keen_eye))
+	if(has_quirk(/datum/quirk/positive/keen_eye))
 		looktime *= 0.25
 	if(do_after(src, looktime))
 		// var/huhsneak

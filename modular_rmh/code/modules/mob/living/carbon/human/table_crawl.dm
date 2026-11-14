@@ -9,7 +9,7 @@
 	return resting && body_position == LYING_DOWN && !buckled && mob_size < MOB_SIZE_LARGE
 
 /mob/living/carbon/human/stand_up()
-	if(try_table_crawl_bonk())
+	if(!stat && try_table_crawl_bonk())
 		return FALSE
 	return ..()
 
@@ -87,8 +87,13 @@
 	var/turf/table_turf = get_turf(src)
 	var/turf/next_turf = get_step(table_turf, direction)
 	var/obj/structure/table/next_table = locate() in next_turf
-	if(!next_table || next_table.occupied || !table_turf.Adjacent(next_turf))
+	if(!next_table || next_table.occupied || next_turf.density || !table_turf.Adjacent(next_turf))
 		return FALSE
+	for(var/atom/movable/blocker as anything in next_turf)
+		if(istype(blocker, /obj/structure/table))
+			continue
+		if(!blocker.CanPass(user, table_turf))
+			return FALSE
 	if(user.client)
 		user.client.move_delay = world.time + user.cached_multiplicative_slowdown
 	user.setDir(direction)

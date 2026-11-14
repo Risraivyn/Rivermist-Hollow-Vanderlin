@@ -41,7 +41,7 @@
 			arousal_amt = 2.5
 			pain_amt = 1.5
 			orgasm_amt = 2.1
-		if(SEX_FORCE_EXTREME)
+		if(SEX_FORCE_EXTREME, SEX_FORCE_UNRELENTING)
 			action_text = "roughly pinches"
 			arousal_amt = 2.1
 			pain_amt = 2.6
@@ -63,7 +63,8 @@
 	return ORGASM_LOCATION_SELF
 
 /datum/sex_action/masturbate/other/clit_rub
-	name = "Rub their clit"
+	name = "Clit rubbing"
+	remote_phrase = "Rub their clit"
 	check_same_tile = FALSE
 
 /datum/sex_action/masturbate/other/clit_rub/shows_on_menu(mob/living/user, mob/living/target)
@@ -106,7 +107,7 @@
 			arousal_amt = 2.5
 			pain_amt = 1.5
 			orgasm_amt = 2.1
-		if(SEX_FORCE_EXTREME)
+		if(SEX_FORCE_EXTREME, SEX_FORCE_UNRELENTING)
 			action_text = "roughly pinches"
 			arousal_amt = 2.1
 			pain_amt = 2.6

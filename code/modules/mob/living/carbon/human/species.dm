@@ -24,6 +24,8 @@ GLOBAL_LIST_EMPTY(roundstart_species)
 	var/default_body_build_f
 	/// BODY_PALETTE_* sprite set the builds draw from.
 	var/body_build_palette = BODY_PALETTE_SKIN
+	var/lips_state_m
+	var/lips_state_f
 	/// if alien colors are disabled, this is the color that will be used by that race
 	var/default_color = "#FFF"
 	/// List of ages that can be selected in prefs for this species
@@ -102,6 +104,8 @@ GLOBAL_LIST_EMPTY(roundstart_species)
 		OFFSET_TESTICLES = list(0,0),\
 		OFFSET_VAGINA = list(0,-4),\
 	)
+
+	var/list/held_item_dir_offsets
 
 	/// Type of damage overlay to use
 	var/damage_overlay_type = "human"
@@ -264,6 +268,7 @@ GLOBAL_LIST_EMPTY(roundstart_species)
 
 	/// List of descriptor choices this species gets in preferences customization
 	var/list/descriptor_choices = list(
+		/datum/descriptor_choice/trait,
 		/datum/descriptor_choice/height,
 		/datum/descriptor_choice/body,
 		/datum/descriptor_choice/stature,
@@ -1009,6 +1014,9 @@ GLOBAL_LIST_EMPTY(roundstart_species)
 	on_gender_update(C)
 	C.update_organ_requirements() //post species trait gains
 
+	if(held_item_dir_offsets)
+		RegisterSignal(C, COMSIG_ATOM_POST_DIR_CHANGE, PROC_REF(on_holder_dir_change))
+
 	if(!(C.status_flags & BUILDING_ORGANS))
 		C.regenerate_icons()
 
@@ -1061,27 +1069,34 @@ GLOBAL_LIST_EMPTY(roundstart_species)
 		for(var/i in inherent_factions)
 			C.set_faction(C.get_faction() - i)
 
+	if(held_item_dir_offsets)
+		UnregisterSignal(C, COMSIG_ATOM_POST_DIR_CHANGE)
+
 	SEND_SIGNAL(C, COMSIG_SPECIES_LOSS, src)
+
+/datum/species/proc/get_held_item_offset(mob/living/carbon/holder, hand_index)
+	var/list/hand_offsets = held_item_dir_offsets?["[holder.dir]"]
+	if(!hand_offsets)
+		return null
+	return hand_offsets[(hand_index % 2) ? 1 : 2]
+
+/datum/species/proc/on_holder_dir_change(mob/living/carbon/holder, old_dir, new_dir)
+	SIGNAL_HANDLER
+	if(old_dir == new_dir || !(locate(/obj/item) in holder.held_items))
+		return
+	holder.update_inv_hands()
 
 /datum/species/proc/handle_body(mob/living/carbon/human/H)
 	H.remove_overlay(BODY_LAYER)
 	H.remove_overlay(ABOVE_BODY_FRONT_LAYER)
 
-	var/list/offsets = H.get_offset_features()
-
 	var/list/standing = list()
 
-	var/obj/item/bodypart/head/HD = H.get_bodypart(BODY_ZONE_HEAD)
-
-	if(HD && !(HAS_TRAIT(H, TRAIT_HUSK)) && !HD.skeletonized)
-		// lipstick
-		if(H.lip_style && (LIPS in species_traits))
-			var/mutable_appearance/lip_overlay = mutable_appearance('icons/mob/human_face.dmi', "lips_[H.lip_style]", -BODY_LAYER)
-			lip_overlay.color = H.lip_color
-			if(LAZYACCESS(offsets, OFFSET_FACE))
-				lip_overlay.pixel_x += offsets[OFFSET_FACE][1]
-				lip_overlay.pixel_y += offsets[OFFSET_FACE][2]
-			standing += lip_overlay
+	// lipstick
+	var/mutable_appearance/lip_overlay = H.get_lips_overlay()
+	if(lip_overlay)
+		standing += lip_overlay
+	standing += H.get_lipstick_mark_overlays()
 
 	//Underwear
 	/*if(!(NO_UNDERWEAR in species_traits))
@@ -1441,7 +1456,9 @@ GLOBAL_LIST_EMPTY(roundstart_species)
 	if(!I.equip_delay_self || bypass_equip_delay_self)
 		return TRUE
 	if(HAS_TRAIT(H, TRAIT_CHUNKYFINGERS))
-		return do_after(H, 5 MINUTES)
+		return do_after(H, 0.5 SECONDS)
+	if(HAS_TRAIT(H, TRAIT_ROTFINGERS))
+		return do_after(H, 10 MINUTES)
 	var/doafter_flags = I.edelay_type ? (IGNORE_USER_LOC_CHANGE) : (NONE)
 	return do_after(H, min((I.equip_delay_self - GET_MOB_ATTRIBUTE_VALUE(H, STAT_SPEED)), 1), timed_action_flags = doafter_flags)
 
@@ -1575,6 +1592,8 @@ GLOBAL_LIST_EMPTY(roundstart_species)
 /datum/species/proc/harm(mob/living/carbon/human/user, mob/living/carbon/human/target, datum/martial_art/attacker_style)
 	if(HAS_TRAIT(user, TRAIT_PACIFISM))
 		to_chat(user, "<span class='warning'>I don't want to harm [target]!</span>")
+		return FALSE
+	if(user.spares_ally(target, TRUE))
 		return FALSE
 	if(target.check_block())
 		target.visible_message("<span class='warning'>[target] blocks [user]'s attack!</span>", \
@@ -1811,6 +1830,8 @@ GLOBAL_LIST_EMPTY(roundstart_species)
 		return
 	if(HAS_TRAIT(user, TRAIT_PACIFISM))
 		to_chat(user, "<span class='warning'>I don't want to harm [target]!</span>")
+		return FALSE
+	if(user.spares_ally(target, TRUE))
 		return FALSE
 	if(HAS_TRAIT(user, TRAIT_FLOORED))
 		return FALSE

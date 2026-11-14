@@ -45,7 +45,7 @@
 			arousal_amt = 1.7
 			pain_amt = 3.4
 			orgasm_amt = 0.7
-		if(SEX_FORCE_EXTREME)
+		if(SEX_FORCE_EXTREME, SEX_FORCE_UNRELENTING)
 			action_text = "smacks"
 			arousal_amt = 1.5
 			pain_amt = 4.8
@@ -63,7 +63,8 @@
 	user.visible_message(span_warning("[user] lowers [user.p_their()] hand from [user.p_their()] groin."))
 
 /datum/sex_action/masturbate/other/slap_pussy
-	name = "Slap their pussy"
+	name = "Pussy slapping"
+	remote_phrase = "Slap their pussy"
 	check_same_tile = FALSE
 	do_time = 2.5 SECONDS
 	stamina_cost = 0
@@ -110,7 +111,7 @@
 			arousal_amt = 1.7
 			pain_amt = 3.4
 			orgasm_amt = 0.7
-		if(SEX_FORCE_EXTREME)
+		if(SEX_FORCE_EXTREME, SEX_FORCE_UNRELENTING)
 			action_text = "smacks"
 			arousal_amt = 1.5
 			pain_amt = 4.8

@@ -677,7 +677,7 @@ GLOBAL_VAR_INIT(character_setup_debug, FALSE)
 			"name" = pref.name,
 			"description" = pref.description,
 		)
-		if(pref.locked_after_spawn && has_spawned)
+		if(pref.locked_after_spawn && is_erp_spawn_locked(user))
 			entry["lock_reason"] = pref.get_edit_lock_reason(user, src)
 		if(istype(pref, /datum/erp_preference/bitflag))
 			var/datum/erp_preference/bitflag/flag_pref = pref
@@ -785,6 +785,7 @@ GLOBAL_VAR_INIT(character_setup_debug, FALSE)
 	var/windowflashing = read_preference(/datum/preference/toggle/windowflashing)
 	var/ambientocclusion = read_preference(/datum/preference/toggle/ambientocclusion)
 	var/auto_fit_viewport = read_preference(/datum/preference/toggle/auto_fit_viewport)
+	var/descriptor_color = read_preference(/datum/preference/toggle/descriptor_color)
 	var/toggles_maptext = read_preference(/datum/preference/bitwise/toggles_maptext)
 	var/pixel_size = read_preference(/datum/preference/numeric/pixel_size)
 	var/scaling_method = read_preference(/datum/preference/choiced/scaling_method)
@@ -934,6 +935,8 @@ GLOBAL_VAR_INIT(character_setup_debug, FALSE)
 	data["voice_type"] = voice_type || "Default"
 	data["voice_color"] = voice_color ? "#[voice_color]" : "#a0a0a0"
 	data["voice_pack"] = voice_pack || VOICE_PACK_DEFAULT
+	data["speech_bark"] = read_preference(/datum/preference/choiced/speech_bark)
+	data["speech_moans"] = !!read_preference(/datum/preference/toggle/speech_moans)
 	data["moan_selection"] = moan_selection || MOANPACK_TYPE_DEF
 	data["selected_accent"] = selected_accent || "None"
 
@@ -953,26 +956,13 @@ GLOBAL_VAR_INIT(character_setup_debug, FALSE)
 	var/mob/dead/new_player/new_player
 	if(istype(user, /mob/dead/new_player))
 		new_player = user
-	if(new_player && SSticker)
-		if(SSticker.IsRoundInProgress())
-			data["round_start_state"] = "started"
-		else if(SSticker.current_state == GAME_STATE_SETTING_UP)
-			data["round_start_state"] = "setup"
-		else if(SSticker.current_state <= GAME_STATE_PREGAME)
-			var/time_remaining = SSticker.GetTimeLeft()
-			if(time_remaining > 0)
-				data["round_start_state"] = "countdown"
-				data["round_start_seconds"] = max(0, round(time_remaining / 10))
-			else if(time_remaining == -10)
-				data["round_start_state"] = "delayed"
-			else
-				data["round_start_state"] = "soon"
-			var/ready_count = 0
-			for(var/mob/dead/new_player/lobby_player as anything in GLOB.new_player_list)
-				if(lobby_player.ready == PLAYER_READY_TO_PLAY)
-					ready_count++
-			data["round_ready_players"] = ready_count
-			data["round_total_players"] = length(GLOB.new_player_list)
+	if(new_player && SSticker && SSticker.current_state <= GAME_STATE_PREGAME)
+		var/ready_count = 0
+		for(var/mob/dead/new_player/lobby_player as anything in GLOB.new_player_list)
+			if(lobby_player.ready == PLAYER_READY_TO_PLAY)
+				ready_count++
+		data["round_ready_players"] = ready_count
+		data["round_total_players"] = length(GLOB.new_player_list)
 	data["round_action_label"] = "Unavailable"
 	data["round_action_icon"] = "ban"
 	data["round_action_color"] = null
@@ -1016,8 +1006,10 @@ GLOBAL_VAR_INIT(character_setup_debug, FALSE)
 		"windowflashing" = !!windowflashing,
 		"lobby_music" = !!(toggles & SOUND_LOBBY),
 		"hear_midis" = !!(toggles & SOUND_MIDI),
+		"hear_speech_barks" = !!read_preference(/datum/preference/toggle/hear_speech_barks),
 		"ambientocclusion" = !!ambientocclusion,
 		"auto_fit_viewport" = !!auto_fit_viewport,
+		"descriptor_color" = !!descriptor_color,
 		"allow_midround_antag" = !!(toggles & MIDROUND_ANTAG),
 		"ambience" = !!(toggles & SOUND_AMBIENCE),
 		"background_music" = !!(toggles & SOUND_SHIP_AMBIENCE),

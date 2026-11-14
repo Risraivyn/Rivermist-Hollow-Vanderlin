@@ -18,6 +18,10 @@ import {
   characterCreatorStrings,
 } from './CharacterCreator.i18n';
 import { LoadoutPanel } from './CharacterCreatorLoadout';
+import {
+  type ProstheticData,
+  ProstheticsPanel,
+} from './CharacterCreatorProsthetics';
 import { PreferencesBadges } from './PreferencesBadges';
 
 // ---------------------------------------------------------------------------
@@ -227,7 +231,8 @@ type DescriptorEntry = {
 };
 type CustomDescriptor = {
   index: number;
-  prefix: string;
+  name?: string;
+  prefix?: string | null;
   text: string;
   visible: Booleanish;
 };
@@ -301,6 +306,8 @@ type CreatorData = {
   voice_type: string;
   voice_color: string;
   voice_pack: string;
+  speech_bark: string;
+  speech_moans: Booleanish;
   moan_selection: string;
   selected_accent: string;
   loadout_catalog: LoadoutCatalogEntry[];
@@ -316,8 +323,6 @@ type CreatorData = {
   round_action_color: string | null;
   round_action_disabled: Booleanish;
   round_action_tooltip: string;
-  round_start_state?: string;
-  round_start_seconds?: number;
   round_ready_players?: number;
   round_total_players?: number;
   cc_unsaved?: Booleanish;
@@ -368,6 +373,7 @@ type CreatorData = {
   cc_rivals?: number;
   cc_tattoo_count?: number;
   cc_tattoos?: TattooData;
+  cc_prosthetics?: ProstheticData;
 };
 
 // ---------------------------------------------------------------------------
@@ -397,6 +403,7 @@ type MirrorCat =
   | 'head'
   | 'markings'
   | 'body'
+  | 'prosthetics'
   | 'taur'
   | 'genitals'
   | 'attire'
@@ -427,6 +434,7 @@ const MIRROR_ORDER: MirrorCat[] = [
   'genitals',
   'attire',
   'piercing',
+  'prosthetics',
 ];
 
 const HEAD_PATTERNS = [
@@ -1306,7 +1314,7 @@ const TextEditor = (props: {
 };
 
 // ---------------------------------------------------------------------------
-// Tattoos: written lettering or designs, edited under the markings list
+// Skin marks: tattoos, brands and body writing, edited under the markings list
 // ---------------------------------------------------------------------------
 
 type TattooEntry = {
@@ -1322,20 +1330,59 @@ type TattooZone = {
   name: string;
   intimate: Booleanish;
   present: Booleanish;
-  full: Booleanish;
+  ink: number;
+  brands: number;
+  writing: number;
   entries: TattooEntry[];
 };
+type MarkColor = { name: string; color: string };
 type TattooData = {
   limbs: { id: string; name: string; zones: TattooZone[] }[];
   styles: string[];
-  pigments: { name: string; color: string }[];
+  pigments: MarkColor[];
+  glows: MarkColor[];
+  writing: { id: string; colors: MarkColor[] }[];
+  brand_color: string;
   max_per_zone: number;
+  max_brands: number;
   max_length: number;
+  brand_max_length: number;
 };
 
 const TATTOO_LETTERING = 'lettering';
+type MarkKind = 'ink' | 'brand' | 'arcane' | 'writing';
+const MARK_KINDS: MarkKind[] = ['ink', 'brand', 'arcane', 'writing'];
+const KIND_ICONS: Record<MarkKind, string> = {
+  ink: 'pen-nib',
+  brand: 'fire',
+  arcane: 'wand-magic-sparkles',
+  writing: 'paintbrush',
+};
+const WRITING_MEDIA = ['charcoal', 'paint', 'lipstick', 'quill'];
 
-/** Tattoo zones grouped by limb; the ink row picks style and pigment for new tattoos. */
+const markKind = (medium: string): MarkKind =>
+  medium === 'brand' || medium === 'arcane' || medium === 'ink'
+    ? medium
+    : 'writing';
+
+const markIcon = (medium: string) =>
+  medium === 'quill' ? 'feather' : KIND_ICONS[markKind(medium)];
+
+/** Text colour and glow of a mark, as close to its look in chat as the editor allows. */
+const markTextStyle = (entry: TattooEntry): CSSProperties | undefined => {
+  if (entry.medium === 'arcane') {
+    return {
+      color: entry.color,
+      textShadow: `0 0 3px ${entry.color}, 0 0 7px ${entry.color}`,
+    };
+  }
+  if (entry.medium === 'brand') {
+    return { color: entry.color };
+  }
+  return undefined;
+};
+
+/** Skin mark zones grouped by limb; the tool row picks what Add makes. */
 const TattooEditor = (props: {
   tattoos: TattooData;
   count: number;
@@ -1344,8 +1391,23 @@ const TattooEditor = (props: {
 }) => {
   const { tattoos, count, onAct } = props;
   const L = props.labels;
+  const [kind, setKind] = useState<MarkKind>('ink');
   const [inkStyle, setInkStyle] = useState(TATTOO_LETTERING);
   const [inkColor, setInkColor] = useState(tattoos.pigments[0]?.color ?? '');
+  const [glowColor, setGlowColor] = useState(tattoos.glows[0]?.color ?? '');
+  const [writingMedium, setWritingMedium] = useState('charcoal');
+  const [writingColor, setWritingColor] = useState('');
+
+  const writing = tattoos.writing.find((media) => media.id === writingMedium);
+  const writingColors = writing?.colors ?? [];
+  const shownWritingColor = writingColors.some(
+    (option) => option.color === writingColor,
+  )
+    ? writingColor
+    : (writingColors[0]?.color ?? '');
+
+  const toOptions = (colors: MarkColor[]): SelectOption[] =>
+    colors.map((option) => ({ value: option.color, label: option.name }));
   const styleOptions: SelectOption[] = tattoos.styles.map((style) => ({
     value: style,
     label:
@@ -1353,16 +1415,99 @@ const TattooEditor = (props: {
         ? L.tattooStyleLettering
         : L.tattooStyleDesign,
   }));
-  const pigmentOptions: SelectOption[] = tattoos.pigments.map((pigment) => ({
-    value: pigment.color,
-    label: pigment.name,
+  const pigmentOptions = toOptions(tattoos.pigments);
+  const glowOptions = toOptions(tattoos.glows);
+  const lipstickOptions = toOptions(
+    tattoos.writing.find((media) => media.id === 'lipstick')?.colors ?? [],
+  );
+  const writingOptions: SelectOption[] = WRITING_MEDIA.map((id) => ({
+    value: id,
+    label: L.markWritingMedia[id] ?? id,
   }));
+
+  const newMedium = kind === 'writing' ? writingMedium : kind;
+  const newColor =
+    kind === 'ink'
+      ? inkColor
+      : kind === 'arcane'
+        ? glowColor
+        : kind === 'writing'
+          ? shownWritingColor
+          : tattoos.brand_color;
+  // Paint asks for its colour on Add; every other tool needs one chosen here.
+  const newColorReady =
+    kind !== 'writing' || writingMedium === 'paint' || !!shownWritingColor;
+
+  const hasRoom = (zone: TattooZone) =>
+    kind === 'ink'
+      ? zone.ink < tattoos.max_per_zone
+      : kind === 'writing'
+        ? zone.writing < 1
+        : zone.brands < tattoos.max_brands;
+
+  /** Colour control for an existing entry; fixed colours show only a swatch. */
+  const entryColor = (zone: TattooZone, entry: TattooEntry, present: boolean) => {
+    const recolor = (color: string) =>
+      onAct('set_color', { zone: zone.id, index: entry.index, color });
+    const options =
+      entry.medium === 'ink'
+        ? pigmentOptions
+        : entry.medium === 'arcane'
+          ? glowOptions
+          : entry.medium === 'lipstick'
+            ? lipstickOptions
+            : null;
+    if (options) {
+      return (
+        <>
+          <Swatch color={entry.color} />
+          <Select
+            value={entry.color}
+            options={options}
+            placeholder={entry.pigment}
+            title={L.tattooPigment}
+            disabled={!present}
+            onChange={recolor}
+          />
+        </>
+      );
+    }
+    if (entry.medium === 'paint') {
+      return (
+        <div
+          title={L.markRepaint}
+          style={{ cursor: present ? 'pointer' : undefined }}
+          onClick={present ? () => recolor('') : undefined}
+        >
+          <Swatch color={entry.color} />
+        </div>
+      );
+    }
+    return (
+      <span title={entry.pigment}>
+        <Swatch color={entry.color} />
+      </span>
+    );
+  };
+
   return (
     <>
       <Ornament>
-        {L.tattoos} ({count})
+        {L.skinMarks} ({count})
       </Ornament>
-      <div className="cc-hint">{L.tattooHint}</div>
+      <div className="cc-hint">{L.markKindHints[kind]}</div>
+      <div className="cc-row cc-tat-kinds">
+        {MARK_KINDS.map((option) => (
+          <Btn
+            key={option}
+            icon={KIND_ICONS[option]}
+            className={kind === option ? 'gold' : ''}
+            onClick={() => setKind(option)}
+          >
+            {L.markKinds[option]}
+          </Btn>
+        ))}
+      </div>
       <div className="cc-row cc-tat-ink">
         <span className="cc-muted">{L.tattooNewInk}</span>
         <Select
@@ -1371,13 +1516,54 @@ const TattooEditor = (props: {
           title={L.tattooStyle}
           onChange={setInkStyle}
         />
-        <Swatch color={inkColor} />
-        <Select
-          value={inkColor}
-          options={pigmentOptions}
-          title={L.tattooPigment}
-          onChange={setInkColor}
-        />
+        {kind === 'writing' ? (
+          <Select
+            value={writingMedium}
+            options={writingOptions}
+            title={L.markWritingWith}
+            onChange={setWritingMedium}
+          />
+        ) : null}
+        {kind === 'ink' ? (
+          <>
+            <Swatch color={inkColor} />
+            <Select
+              value={inkColor}
+              options={pigmentOptions}
+              title={L.tattooPigment}
+              onChange={setInkColor}
+            />
+          </>
+        ) : null}
+        {kind === 'arcane' ? (
+          <>
+            <Swatch color={glowColor} />
+            <Select
+              value={glowColor}
+              options={glowOptions}
+              title={L.markGlow}
+              onChange={setGlowColor}
+            />
+          </>
+        ) : null}
+        {kind === 'brand' ? <Swatch color={tattoos.brand_color} /> : null}
+        {kind === 'writing' && writingMedium === 'paint' ? (
+          <span className="cc-muted">{L.markPaintOnAdd}</span>
+        ) : null}
+        {kind === 'writing' && writingColors.length > 1 ? (
+          <>
+            <Swatch color={shownWritingColor} />
+            <Select
+              value={shownWritingColor}
+              options={toOptions(writingColors)}
+              title={L.tattooPigment}
+              onChange={setWritingColor}
+            />
+          </>
+        ) : null}
+        {kind === 'writing' && writingColors.length === 1 ? (
+          <Swatch color={writingColors[0].color} />
+        ) : null}
       </div>
       <div className="cc-marking-zones">
         {tattoos.limbs.map((limb) => (
@@ -1385,7 +1571,7 @@ const TattooEditor = (props: {
             <div className="cc-marking-zone-head">{limb.name}</div>
             {limb.zones.map((zone) => {
               const present = asBool(zone.present);
-              const full = asBool(zone.full);
+              const room = hasRoom(zone);
               return (
                 <div className="cc-tat-zone" key={zone.id}>
                   <div className="cc-tat-zone-head">
@@ -1399,21 +1585,30 @@ const TattooEditor = (props: {
                       </span>
                     ) : null}
                     <span
-                      className={`cc-tat-count ${full ? 'full' : ''}`}
-                      title={full ? L.tattooFull : undefined}
+                      className={`cc-tat-count ${zone.ink >= tattoos.max_per_zone ? 'full' : ''}`}
+                      title={L.markKinds.ink}
                     >
-                      {zone.entries.length} / {tattoos.max_per_zone}
+                      <Icon name={KIND_ICONS.ink} /> {zone.ink}/
+                      {tattoos.max_per_zone}
+                    </span>
+                    <span
+                      className={`cc-tat-count ${zone.brands >= tattoos.max_brands ? 'full' : ''}`}
+                      title={L.markBrandCount}
+                    >
+                      <Icon name={KIND_ICONS.brand} /> {zone.brands}/
+                      {tattoos.max_brands}
                     </span>
                     <Btn
                       className="cc-toggle"
                       icon="plus"
-                      title={L.tattooAdd}
-                      disabled={!present || full}
+                      title={room ? L.markAdd[kind] : L.tattooFull}
+                      disabled={!present || !room || !newColorReady}
                       onClick={() =>
                         onAct('add', {
                           zone: zone.id,
+                          medium: newMedium,
                           style: inkStyle,
-                          color: inkColor,
+                          color: newColor,
                         })
                       }
                     >
@@ -1424,10 +1619,20 @@ const TattooEditor = (props: {
                     <div className="cc-tat-missing">{L.tattooMissing}</div>
                   )}
                   {zone.entries.map((entry) => (
-                    <div className="cc-tat-entry" key={entry.index}>
+                    <div
+                      className={`cc-tat-entry cc-tat-${markKind(entry.medium)}`}
+                      key={entry.index}
+                    >
                       <div className="cc-marking-row">
+                        <span
+                          className="cc-tat-medium"
+                          title={L.markKinds[markKind(entry.medium)]}
+                        >
+                          <Icon name={markIcon(entry.medium)} />
+                        </span>
                         <div
                           className={`cc-marking-name ${present ? 'cc-tat-text' : ''}`}
+                          style={markTextStyle(entry)}
                           title={
                             present
                               ? `${entry.text}\n${L.tattooEditHint}`
@@ -1473,21 +1678,12 @@ const TattooEditor = (props: {
                             })
                           }
                         />
-                        <Swatch color={entry.color} />
-                        <Select
-                          value={entry.color}
-                          options={pigmentOptions}
-                          placeholder={entry.pigment}
-                          title={L.tattooPigment}
-                          disabled={!present}
-                          onChange={(color) =>
-                            onAct('set_color', {
-                              zone: zone.id,
-                              index: entry.index,
-                              color,
-                            })
-                          }
-                        />
+                        {entryColor(zone, entry, present)}
+                        {markKind(entry.medium) === 'writing' ? (
+                          <span className="cc-muted cc-tat-note">
+                            {L.markWashes}
+                          </span>
+                        ) : null}
                       </div>
                     </div>
                   ))}
@@ -1504,13 +1700,6 @@ const TattooEditor = (props: {
 // ---------------------------------------------------------------------------
 // Main window
 // ---------------------------------------------------------------------------
-
-const formatSeconds = (total: number) => {
-  const safe = Math.max(0, Math.floor(total));
-  const minutes = Math.floor(safe / 60);
-  const seconds = safe % 60;
-  return `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
-};
 
 export const CharacterCreator = () => {
   const { act, data } = useBackend<CreatorData>();
@@ -1556,19 +1745,6 @@ export const CharacterCreator = () => {
 
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dollBoxRef = useRef<HTMLDivElement>(null);
-
-  // The lobby countdown ticks locally between data pushes.
-  const [roundSeconds, setRoundSeconds] = useState<number>(-1);
-  useEffect(() => {
-    setRoundSeconds(Number(data.round_start_seconds ?? -1));
-  }, [data.round_start_seconds]);
-  useEffect(() => {
-    if (roundSeconds <= 0) {
-      return;
-    }
-    const timer = setTimeout(() => setRoundSeconds(roundSeconds - 1), 1000);
-    return () => clearTimeout(timer);
-  }, [roundSeconds]);
 
   // ---- Effects ----
 
@@ -1765,7 +1941,9 @@ export const CharacterCreator = () => {
     return true;
   });
   const mirrorVisible: MirrorCat[] = MIRROR_ORDER.filter(
-    (cat) => cat !== 'taur' || asBool(data.is_taur),
+    (cat) =>
+      (cat !== 'taur' || asBool(data.is_taur)) &&
+      (cat !== 'prosthetics' || !!data.cc_prosthetics),
   );
   // A category that disappeared (no sub-origin, no taur body) falls back to the one above it.
   const fallback = <T,>(order: T[], visible: T[], current: T) => {
@@ -3897,6 +4075,18 @@ export const CharacterCreator = () => {
         return renderMarkings();
       case 'body':
         return renderBody();
+      case 'prosthetics':
+        return windowShell(
+          L.mirror.prosthetics,
+          data.cc_prosthetics ? (
+            <ProstheticsPanel
+              data={data.cc_prosthetics}
+              labels={L}
+              onPick={(slot, option) => act('cc_prosthetic', { slot, option })}
+              onImplant={(slot, implant) => act('cc_implant', { slot, implant })}
+            />
+          ) : null,
+        );
       case 'taur':
         return renderTaur();
       case 'genitals':
@@ -4000,21 +4190,23 @@ export const CharacterCreator = () => {
                 .filter((custom) => asBool(custom.visible))
                 .map((custom) => (
                   <Fragment key={custom.index}>
-                    <div className="cc-kv-label">
-                      {L.custom} #{custom.index}
+                    <div className="cc-kv-label" title={custom.name}>
+                      {custom.name || `${L.custom} #${custom.index}`}
                     </div>
                     <div className="cc-row">
-                      <Btn
-                        onClick={() =>
-                          doPref(
-                            'custom_descriptor_prefix',
-                            'change_descriptor',
-                            { index: custom.index },
-                          )
-                        }
-                      >
-                        {custom.prefix}
-                      </Btn>
+                      {custom.prefix ? (
+                        <Btn
+                          onClick={() =>
+                            doPref(
+                              'custom_descriptor_prefix',
+                              'change_descriptor',
+                              { index: custom.index },
+                            )
+                          }
+                        >
+                          {custom.prefix}
+                        </Btn>
+                      ) : null}
                       <Btn
                         className="fluid"
                         onClick={() =>
@@ -4125,6 +4317,9 @@ export const CharacterCreator = () => {
                   </>,
                   () => doPref('voice', 'input'),
                 )}
+                {kvButton(L.speechBark, text(data.speech_bark), () =>
+                  doPref('speech_bark', 'input'),
+                )}
                 <div className="cc-kv-label">{L.voicePack}</div>
                 <div className="cc-row">
                   <Btn
@@ -4151,6 +4346,11 @@ export const CharacterCreator = () => {
                     doPref('moanpreview', 'input'),
                   )}
                 </div>
+                {kvButton(
+                  L.speechMoans,
+                  data.speech_moans ? L.on : L.off,
+                  () => doPref('speech_moans', 'input'),
+                )}
               </div>
               <div className="cc-grow" />
               <Btn
@@ -4470,21 +4670,42 @@ export const CharacterCreator = () => {
                       >
                         {enabled ? L.yes : L.no}
                       </Btn>
-                      {enabled
-                        ? [1, 2, 3, 4, 5].map((level) => (
-                            <Btn
-                              key={level}
-                              className={`square ${kink.intensity === level ? 'selected' : ''}`}
-                              onClick={() =>
-                                kinkAct(kink.name, 'set_intensity', {
-                                  intensity: level,
-                                })
-                              }
-                            >
-                              {level}
-                            </Btn>
-                          ))
-                        : null}
+                      {enabled ? (
+                        <>
+                          <Btn
+                            className="square"
+                            icon="chevron-left"
+                            disabled={kink.intensity <= 1}
+                            onClick={() =>
+                              kinkAct(kink.name, 'set_intensity', {
+                                intensity: kink.intensity - 1,
+                              })
+                            }
+                          />
+                          <div className="cc-row" style={{ gap: 2 }}>
+                            {[1, 2, 3, 4, 5].map((level) => (
+                              <Icon
+                                key={level}
+                                name="circle"
+                                style={{
+                                  fontSize: 8,
+                                  opacity: level <= kink.intensity ? 1 : 0.25,
+                                }}
+                              />
+                            ))}
+                          </div>
+                          <Btn
+                            className="square"
+                            icon="chevron-right"
+                            disabled={kink.intensity >= 5}
+                            onClick={() =>
+                              kinkAct(kink.name, 'set_intensity', {
+                                intensity: kink.intensity + 1,
+                              })
+                            }
+                          />
+                        </>
+                      ) : null}
                       {enabled ? (
                         <Btn
                           icon="pen"
@@ -4541,8 +4762,18 @@ export const CharacterCreator = () => {
       label: 'balloon_alerts',
     },
     { key: 'runechat', action: 'runechat', label: 'runechat' },
+    {
+      key: 'descriptor_color',
+      action: 'descriptor_color',
+      label: 'descriptor_color',
+    },
     { key: 'lobby_music', action: 'lobby_music', label: 'lobby_music' },
     { key: 'hear_midis', action: 'hear_midis', label: 'hear_midis' },
+    {
+      key: 'hear_speech_barks',
+      action: 'hear_speech_barks',
+      label: 'hear_speech_barks',
+    },
     { key: 'ambience', action: 'ambience', label: 'ambience' },
     {
       key: 'background_music',
@@ -4579,11 +4810,18 @@ export const CharacterCreator = () => {
         'auto_fit_viewport',
         'balloon_alerts',
         'runechat',
+        'descriptor_color',
       ],
     },
     {
       title: 'audio',
-      keys: ['lobby_music', 'hear_midis', 'ambience', 'background_music'],
+      keys: [
+        'lobby_music',
+        'hear_midis',
+        'hear_speech_barks',
+        'ambience',
+        'background_music',
+      ],
     },
     { title: 'round', keys: ['allow_midround_antag', 'be_voice'] },
   ];
@@ -5128,6 +5366,7 @@ export const CharacterCreator = () => {
     head: 'smile',
     markings: 'paint-brush',
     body: 'child',
+    prosthetics: 'cogs',
     taur: 'horse',
     genitals: 'venus-mars',
     attire: 'tshirt',
@@ -5200,13 +5439,6 @@ export const CharacterCreator = () => {
       doPref('finished');
     }
   };
-  const roundState = (data.round_start_state ||
-    '') as keyof CharacterCreatorStrings['roundStates'];
-  const roundLabel = roundState ? L.roundStates[roundState] || '' : '';
-  const roundText =
-    roundState === 'countdown'
-      ? `${roundLabel} ${formatSeconds(roundSeconds)}`
-      : roundLabel;
   const readyText = data.round_total_players
     ? `${data.round_ready_players ?? 0}/${data.round_total_players} ${L.roundReady}`
     : '';
@@ -5265,14 +5497,9 @@ export const CharacterCreator = () => {
       >
         {text(data.round_action_label)}
       </Btn>
-      {roundText || readyText ? (
+      {readyText ? (
         <div className="cc-round-line cc-topbar-extra">
-          {roundText ? (
-            <span className="cc-round-time">{roundText}</span>
-          ) : null}
-          {readyText ? (
-            <span className="cc-round-ready">{readyText}</span>
-          ) : null}
+          <span className="cc-round-ready">{readyText}</span>
         </div>
       ) : null}
       <div className="cc-grow" />
@@ -5790,8 +6017,12 @@ export const CharacterCreator = () => {
       }
     }
     for (const cat of mirrorVisible) {
-      // Attire belongs to the real character; the ooze keeps its own body plan.
-      if (cat === 'attire' || (oozeMode && cat === 'taur')) {
+      // Attire and prosthetics belong to the real character; the ooze keeps its own body plan.
+      if (
+        cat === 'attire' ||
+        cat === 'prosthetics' ||
+        (oozeMode && cat === 'taur')
+      ) {
         continue;
       }
       items.push({

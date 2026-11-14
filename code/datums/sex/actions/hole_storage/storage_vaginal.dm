@@ -1,6 +1,6 @@
 
 /datum/sex_action/hole_storage/vagina_store
-	name = "Store items in vagina"
+	name = "Stuff pussy"
 	hole_id = ORGAN_SLOT_VAGINA
 
 /datum/sex_action/hole_storage/vagina_store/shows_on_menu(mob/living/user, mob/living/target)
@@ -137,11 +137,11 @@
 
 	user.update_inv_hands()
 	user.update_a_intents()
-	perform_sex_action(user, target, 0.5, pain_amt, 0.5)
+	perform_sex_action(target, user, 0.5, pain_amt, 0.5)
 	handle_passive_ejaculation()
 
 /datum/sex_action/hole_storage/vagina_remove
-	name = "Remove items from vagina"
+	name = "Empty pussy"
 	hole_id = ORGAN_SLOT_VAGINA
 
 /datum/sex_action/hole_storage/vagina_remove/shows_on_menu(mob/living/user, mob/living/target)
@@ -230,13 +230,13 @@
 			user.visible_message(spanify_force("I fish out the [removed_item] from [target]'s pussy[feel]..."))
 		removed_item.doMove(get_turf(user))
 		user.put_in_active_hand(removed_item)
-	perform_sex_action(user, target, 0.5, pain_amt, 0.5)
+	perform_sex_action(target, user, 0.5, pain_amt, 0.5)
 	handle_passive_ejaculation()
 	pending_toy = choose_toy_to_reach(hole, STORAGE_LAYER_INNER)
 
 
 /datum/sex_action/hole_storage/vagina_remove_deep
-	name = "Push out items from deep inside pussy"
+	name = "Deep-empty pussy"
 	hole_id = ORGAN_SLOT_VAGINA
 	var/fail_counter = 0
 	var/list/stored_items_layer
@@ -314,6 +314,6 @@
 	user.visible_message("<span class='love_mid'>[user] tenses up and pushes [removed_item] out of their pussy.</span>", "<span class='love_mid'>With some effort, I push out [removed_item][feel].</span>")
 	removed_item.doMove(get_turf(user))
 
-	perform_sex_action(user, target, 0.5, pain_amt, 0.5)
+	perform_sex_action(target, user, 0.5, pain_amt, 0.5)
 	handle_passive_ejaculation()
 	pending_toy = choose_toy_to_reach(hole, STORAGE_LAYER_DEEP)
