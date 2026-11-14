@@ -19,7 +19,7 @@
 	if(glide_size > 0)
 		ticks_to_move = round(world.icon_size / glide_size)
 
-	var/total_points = clamp(ticks_to_move, 1, 4)
+	var/total_points = clamp(ticks_to_move, 1, 2)
 
 	if(total_points <= 1)
 		shadow_glide_id++

@@ -1,4 +1,4 @@
-#define SHADOW_IMAGE_POOL_SIZE 150
+#define SHADOW_IMAGE_POOL_SIZE 110
 #define SHADOW_OPACITY         255
 GLOBAL_LIST_EMPTY(fov_cutout_objects)
 GLOBAL_VAR_INIT(fov_box_uid, 0)
