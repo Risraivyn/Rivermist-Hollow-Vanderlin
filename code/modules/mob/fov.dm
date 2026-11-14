@@ -1,4 +1,4 @@
-#define SHADOW_IMAGE_POOL_SIZE 110
+#define SHADOW_IMAGE_POOL_SIZE 140
 #define SHADOW_OPACITY         255
 GLOBAL_LIST_EMPTY(fov_cutout_objects)
 GLOBAL_VAR_INIT(fov_box_uid, 0)
@@ -91,19 +91,19 @@ GLOBAL_VAR_INIT(fov_box_uid, 0)
 		L.update_dynamic_shadows(custom_glide = 0)
 
 /mob/living/proc/update_dynamic_shadows(custom_px = null, custom_py = null, custom_radius = null, custom_glide = 0)
+	if(!client)
+		return
+
+	if(!GLOB.shadows_enabled)
+		if(client.active_shadows.len)
+			client.clear_unused_shadows(null)
+		return
+
 	var/bench = GLOB.shadow_profiling_enabled
 	var/t_start = 0
 	if(bench)
-		var/total_cost = TICK_USAGE_REAL - t_start
-		if(total_cost < 0) total_cost += 100
-		GLOB.shadow_total_calls++
-		GLOB.shadow_total_tick_usage += total_cost
+		t_start = TICK_USAGE_REAL
 
-		if(client)
-			GLOB.shadow_prof_player_calls[client.ckey]++
-
-	if(!client)
-		return
 	client.init_shadow_pool()
 
 	var/turf/my_turf = get_turf(src)
@@ -183,8 +183,7 @@ GLOBAL_VAR_INIT(fov_box_uid, 0)
 			var/dc = I.last_mat_c - mc
 			var/df = I.last_mat_f - mf
 
-
-			if((dc * dc + df * df) > 1.44)
+			if((dc * dc + df * df) > GLOB.shadow_matrix_threshold)
 				I.transform = matrix(
 					quad_data[i + 2], quad_data[i + 3], mc,
 					quad_data[i + 5], quad_data[i + 6], mf
@@ -242,6 +241,12 @@ GLOBAL_VAR_INIT(fov_box_uid, 0)
 		if(total_cost < 0) total_cost += 100
 		GLOB.shadow_total_calls++
 		GLOB.shadow_total_tick_usage += total_cost
+		GLOB.shadow_prof_player_calls[client.ckey]++
+
+		if(total_cost > GLOB.shadow_prof_max_spike)
+			GLOB.shadow_prof_max_spike = total_cost
+		if(total_cost >= 10)
+			GLOB.shadow_prof_spike_count++
 
 /client/proc/reset_shadow_pool()
 	for(var/key in active_shadows)

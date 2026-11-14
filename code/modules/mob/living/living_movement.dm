@@ -6,7 +6,7 @@
 	if(m_intent == MOVE_INTENT_RUN)
 		consider_ambush()
 
-	if(!client)
+	if(!client || !GLOB.shadows_enabled)
 		return
 	var/turf/old_turf = get_turf(OldLoc)
 	var/turf/new_turf = get_turf(src)
@@ -15,11 +15,15 @@
 		update_dynamic_shadows()
 		return
 
+	var/max_points = GLOB.shadow_glide_points
+	if(GLOB.shadow_auto_throttle_cpu > 0 && world.cpu > GLOB.shadow_auto_throttle_cpu)
+		max_points = 1
+
 	var/ticks_to_move = 1
 	if(glide_size > 0)
 		ticks_to_move = round(world.icon_size / glide_size)
 
-	var/total_points = clamp(ticks_to_move, 1, 2)
+	var/total_points = clamp(ticks_to_move, 1, max_points)
 
 	if(total_points <= 1)
 		shadow_glide_id++
