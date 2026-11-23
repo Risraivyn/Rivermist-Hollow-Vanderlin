@@ -729,8 +729,9 @@ GLOBAL_VAR_INIT(shadow_prof_spike_count, 0)
 		var/total_active = 0
 		var/total_pool = 0
 		for(var/client/C in GLOB.clients)
-			if(C.active_shadows) total_active += C.active_shadows.len
-			if(C.shadow_images_pool) total_pool += C.shadow_images_pool.len
+			total_active += C.active_shadow_count
+			if(C.shadow_images_pool)
+				total_pool += (C.shadow_images_pool.len - C.active_shadow_count)
 
 		msg += "Active Shadow Triangles (All Clients): <b>[total_active]</b> | In Pool: <b>[total_pool]</b><br>"
 
@@ -780,8 +781,7 @@ GLOBAL_DATUM_INIT(shadow_admin_panel, /datum/shadow_admin_panel, new)
 	var/clients_count = 0
 	for(var/client/C in GLOB.clients)
 		clients_count++
-		if(C.active_shadows)
-			total_active_triangles += C.active_shadows.len
+		total_active_triangles += C.active_shadow_count
 
 	var/list/dat = list()
 	dat += "<style>"
@@ -888,8 +888,7 @@ GLOBAL_DATUM_INIT(shadow_admin_panel, /datum/shadow_admin_panel, new)
 
 /datum/shadow_admin_panel/proc/clear_shadows_all()
 	for(var/client/C in GLOB.clients)
-		if(C.active_shadows?.len)
-			C.clear_unused_shadows(null)
+		C.clear_all_shadows()
 	for(var/obj/O in GLOB.fov_cutout_objects)
 		if(O.cutout_atom)
 			O.cutout_atom.alpha = 0
