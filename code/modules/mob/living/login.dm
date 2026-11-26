@@ -28,7 +28,7 @@
 	if(!funeral_login())
 		log_game("[key_name(src)] on login: had an issue with funeral-checking logic.")
 	if(client)
-		client.reset_shadow_pool()
+		client.destroy_shadow_pool()
 		client.init_shadow_pool()
 		update_dynamic_shadows()
 
