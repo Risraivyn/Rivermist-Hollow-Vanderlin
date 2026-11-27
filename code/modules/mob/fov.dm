@@ -43,7 +43,6 @@ GLOBAL_VAR_INIT(fov_box_uid, 0)
 		if(!used_keys || !used_keys[key])
 			var/image/I = active_shadows[key]
 			if(I)
-				animate(I)
 				I.loc = null
 				shadow_images_pool += I
 			keys_to_remove += key
@@ -54,6 +53,9 @@ GLOBAL_VAR_INIT(fov_box_uid, 0)
 /client/proc/clear_all_shadows()
 	clear_unused_shadows(null)
 
+/client/proc/init_shadow_images()
+	init_shadow_pool()
+
 /client/proc/reset_shadow_pool()
 	clear_unused_shadows(null)
 
@@ -61,33 +63,14 @@ GLOBAL_VAR_INIT(fov_box_uid, 0)
 	for(var/key in active_shadows)
 		var/image/I = active_shadows[key]
 		if(I)
-			animate(I)
 			images -= I
 
 	for(var/image/I in shadow_images_pool)
 		if(I)
-			animate(I)
 			images -= I
 
 	active_shadows.Cut()
 	shadow_images_pool.Cut()
-
-/client/proc/init_shadow_images()
-	init_shadow_pool()
-
-/proc/is_wall_tile(turf/T)
-	if(!T) return FALSE
-	if(T.density && T.opacity) return TRUE
-	if(istype(T, /turf/closed)) return TRUE
-	return FALSE
-
-/proc/get_round_occluder(turf/T)
-	if(!T) return null
-	for(var/atom/A in T.contents)
-		if(istype(A, /obj/structure/flora/newtree))
-			if(A.density && A.opacity)
-				return A
-	return null
 
 /mob/living
 	var/shadow_glide_id = 0
@@ -97,44 +80,9 @@ GLOBAL_VAR_INIT(fov_box_uid, 0)
 	var/is_looking_afar = FALSE
 	var/shadow_glide_time = 0
 	var/shadow_defer_client_move = FALSE
-
-
-/proc/notify_shadows_map_changed(atom/A, custom_range = 18, mob/living/skip_mob = null)
-	if(!SSmapping || !SSmapping.initialized)
-		return
-
-	for(var/mob/living/L in range(custom_range, A))
-		if(!L.client || L == skip_mob)
-			continue
-		L.update_dynamic_shadows(custom_glide = 0)
+	var/shadow_gliding = FALSE
 
 /mob/living/proc/update_dynamic_shadows(custom_px = null, custom_py = null, custom_radius = null, custom_glide = 0)
-	if(!client)
-		return
-
-	if(!GLOB.shadows_enabled)
-		if(client.active_shadows.len)
-			client.clear_unused_shadows(null)
-		return
-
-	var/turf/my_turf = get_turf(src)
-	if(!my_turf)
-		return
-
-	var/px
-	var/py
-	if(custom_px != null && custom_py != null)
-		px = custom_px
-		py = custom_py
-	else
-		var/total_px = (isnum(src.step_x) ? src.step_x : 0) + src.pixel_x
-		var/total_py = (isnum(src.step_y) ? src.step_y : 0) + src.pixel_y
-		px = my_turf.x + 0.5 + (total_px / 32.0)
-		py = my_turf.y + 0.5 + (total_py / 32.0)
-
-	update_dynamic_shadows_step(px, py, px, py, 0, custom_radius)
-
-/mob/living/proc/update_dynamic_shadows_step(start_px, start_py, end_px, end_py, total_ds = 0, custom_radius = null)
 	if(!client)
 		return
 
@@ -154,18 +102,30 @@ GLOBAL_VAR_INIT(fov_box_uid, 0)
 	if(!my_turf)
 		return
 
-	shadow_curr_px = end_px
-	shadow_curr_py = end_py
+	var/px
+	var/py
+	if(custom_px != null && custom_py != null)
+		px = custom_px
+		py = custom_py
+	else if(shadow_gliding && shadow_curr_px != null && shadow_curr_py != null && abs(shadow_curr_px - my_turf.x) <= 1.5 && abs(shadow_curr_py - my_turf.y) <= 1.5)
+		px = shadow_curr_px
+		py = shadow_curr_py
+	else
+		var/total_px = (isnum(src.step_x) ? src.step_x : 0) + src.pixel_x
+		var/total_py = (isnum(src.step_y) ? src.step_y : 0) + src.pixel_y
+		px = my_turf.x + 0.5 + (total_px / 32.0)
+		py = my_turf.y + 0.5 + (total_py / 32.0)
+
+	shadow_curr_px = px
+	shadow_curr_py = py
 
 	var/my_z = my_turf.z
 	var/radius = custom_radius ? custom_radius : (is_looking_afar ? 18 : 8)
-	var/num_frames = (total_ds > 0) ? 4 : 1
-	var/step_ds = total_ds * 0.25
 
 	var/t_rust = 0
 	if(bench) t_rust = TICK_USAGE_REAL
 
-	var/list/quad_data = call_ext(SHADOWCAST_LIB, "byond:calculate_shadows_step")(start_px, start_py, end_px, end_py, my_z, radius, num_frames)
+	var/list/quad_data = call_ext(SHADOWCAST_LIB, "byond:calculate_shadows_step")(px, py, px, py, my_z, radius, 1)
 
 	if(bench)
 		var/d = TICK_USAGE_REAL - t_rust
@@ -183,74 +143,31 @@ GLOBAL_VAR_INIT(fov_box_uid, 0)
 		var/last_ay = -1
 		var/turf/cached_turf = null
 
-		if(num_frames == 4)
-			for(var/i = 1; i + 26 <= total_len; i += 27)
-				var/key = num2text(quad_data[i + 26], 12)
-				used_keys_this_frame[key] = TRUE
+		for(var/i = 1; i + 8 <= total_len; i += 9)
+			var/key = num2text(quad_data[i + 8], 12)
+			used_keys_this_frame[key] = TRUE
 
-				var/ax = quad_data[i]
-				var/ay = quad_data[i + 1]
-				if(ax != last_ax || ay != last_ay)
-					cached_turf = locate(ax, ay, my_z)
-					last_ax = ax
-					last_ay = ay
+			var/ax = quad_data[i]
+			var/ay = quad_data[i + 1]
+			if(ax != last_ax || ay != last_ay)
+				cached_turf = locate(ax, ay, my_z)
+				last_ax = ax
+				last_ay = ay
 
-				var/is_new = FALSE
-				var/image/I = client.active_shadows[key]
+			var/image/I = client.active_shadows[key]
+			if(!I)
+				I = client.alloc_shadow_image()
 				if(!I)
-					I = client.alloc_shadow_image()
-					if(!I)
-						continue
-					client.active_shadows[key] = I
-					I.loc = cached_turf
-					is_new = TRUE
-				else if(I.loc != cached_turf)
-					I.loc = cached_turf
-					is_new = TRUE
+					continue
+				client.active_shadows[key] = I
+				I.loc = cached_turf
+			else if(I.loc != cached_turf)
+				I.loc = cached_turf
 
-				var/matrix/M1 = matrix(quad_data[i + 2],  quad_data[i + 3],  quad_data[i + 4],  quad_data[i + 5],  quad_data[i + 6],  quad_data[i + 7])
-				var/matrix/M2 = matrix(quad_data[i + 8],  quad_data[i + 9],  quad_data[i + 10], quad_data[i + 11], quad_data[i + 12], quad_data[i + 13])
-				var/matrix/M3 = matrix(quad_data[i + 14], quad_data[i + 15], quad_data[i + 16], quad_data[i + 17], quad_data[i + 18], quad_data[i + 19])
-				var/matrix/M4 = matrix(quad_data[i + 20], quad_data[i + 21], quad_data[i + 22], quad_data[i + 23], quad_data[i + 24], quad_data[i + 25])
-
-				if(is_new)
-					animate(I)
-					I.transform = M1
-					animate(I, transform = M2, time = step_ds)
-					animate(transform = M3, time = step_ds)
-					animate(transform = M4, time = step_ds)
-				else
-					animate(I, transform = M1, time = step_ds, flags = ANIMATION_END_NOW)
-					animate(transform = M2, time = step_ds)
-					animate(transform = M3, time = step_ds)
-					animate(transform = M4, time = step_ds)
-		else
-			for(var/i = 1; i + 8 <= total_len; i += 9)
-				var/key = num2text(quad_data[i + 8], 12)
-				used_keys_this_frame[key] = TRUE
-
-				var/ax = quad_data[i]
-				var/ay = quad_data[i + 1]
-				if(ax != last_ax || ay != last_ay)
-					cached_turf = locate(ax, ay, my_z)
-					last_ax = ax
-					last_ay = ay
-
-				var/image/I = client.active_shadows[key]
-				if(!I)
-					I = client.alloc_shadow_image()
-					if(!I)
-						continue
-					client.active_shadows[key] = I
-					I.loc = cached_turf
-				else if(I.loc != cached_turf)
-					I.loc = cached_turf
-
-				animate(I)
-				I.transform = matrix(
-					quad_data[i + 2], quad_data[i + 3], quad_data[i + 4],
-					quad_data[i + 5], quad_data[i + 6], quad_data[i + 7]
-				)
+			I.transform = matrix(
+				quad_data[i + 2], quad_data[i + 3], quad_data[i + 4],
+				quad_data[i + 5], quad_data[i + 6], quad_data[i + 7]
+			)
 
 	if(bench)
 		var/d = TICK_USAGE_REAL - t_matrices
@@ -271,7 +188,7 @@ GLOBAL_VAR_INIT(fov_box_uid, 0)
 	if(bench) t_cutouts = TICK_USAGE_REAL
 
 	if(GLOB.fov_cutout_objects.len)
-		var/list/visible_ids = call_ext(SHADOWCAST_LIB, "byond:get_visible_boxes")(end_px, end_py, my_z, radius)
+		var/list/visible_ids = call_ext(SHADOWCAST_LIB, "byond:get_visible_boxes")(px, py, my_z, radius)
 		var/list/visible_map = list()
 
 		if(islist(visible_ids))
@@ -305,6 +222,14 @@ GLOBAL_VAR_INIT(fov_box_uid, 0)
 		if(total_cost >= 10)
 			GLOB.shadow_prof_spike_count++
 
+/proc/notify_shadows_map_changed(atom/A, custom_range = 18, mob/living/skip_mob = null)
+	if(!SSmapping || !SSmapping.initialized)
+		return
+
+	for(var/mob/living/L in range(custom_range, A))
+		if(!L.client || L == skip_mob)
+			continue
+		L.update_dynamic_shadows(custom_glide = 0)
 
 /obj/effect/shadow_cutout
 	name = "shadow cutout"
